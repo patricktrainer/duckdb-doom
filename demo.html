@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DuckDB-DOOM Demo</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      line-height: 1.6;
+      color: #333;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    h1 {
+      text-align: center;
+      color: #2c3e50;
+    }
+    .demo-container {
+      background-color: #f8f9fa;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 20px 0;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .button {
+      display: inline-block;
+      background-color: #3498db;
+      color: white;
+      padding: 10px 20px;
+      text-decoration: none;
+      border-radius: 4px;
+      font-weight: bold;
+      margin: 10px 0;
+    }
+    .button:hover {
+      background-color: #2980b9;
+    }
+    .screenshot {
+      max-width: 100%;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      margin: 20px 0;
+    }
+    pre {
+      background-color: #f1f1f1;
+      padding: 15px;
+      border-radius: 4px;
+      overflow-x: auto;
+    }
+    footer {
+      text-align: center;
+      margin-top: 40px;
+      color: #7f8c8d;
+      font-size: 0.9em;
+    }
+  </style>
+</head>
+<body>
+  <h1>DuckDB-DOOM</h1>
+  
+  <div class="demo-container">
+    <h2>A 3D Shooter Implemented Entirely in SQL</h2>
+    <p>
+      DuckDB-DOOM demonstrates the computational power of SQL by implementing an entire
+      first-person shooter game using only SQL queries running in DuckDB-WASM.
+    </p>
+    <a href="index.html" class="button">Play the Game</a>
+  </div>
+
+  <h2>Game Screenshot</h2>
+  <p>
+    The game features true 3D rendering with raycasting, all implemented in SQL:
+  </p>
+  <img src="docs/screenshot.png" alt="DuckDB-DOOM Screenshot" class="screenshot">
+
+  <h2>How It Works</h2>
+  <p>
+    The game leverages SQL in creative ways:
+  </p>
+  <ul>
+    <li>Maps, player, enemies and bullets are stored in database tables</li>
+    <li>Recursive CTEs implement raycasting for 3D rendering</li>
+    <li>SQL queries handle collision detection and game physics</li>
+    <li>Views transform game state into ASCII art</li>
+  </ul>
+
+  <h2>Sample SQL</h2>
+  <p>
+    Here's a snippet of SQL that renders the 3D view using raycasting:
+  </p>
+  <pre>
+CREATE OR REPLACE VIEW render_3d_frame AS
+WITH RECURSIVE
+s AS (SELECT * FROM settings LIMIT 1),
+p AS (SELECT * FROM player LIMIT 1),
+potential_cols AS ( SELECT col FROM generate_series(0, 255) AS gs(col) ),
+potential_rows AS ( SELECT row FROM generate_series(0, 255) AS gs(row) ),
+cols AS ( SELECT pc.col FROM potential_cols pc, s WHERE pc.col < s.view_w ),
+rows_gen AS ( SELECT pr.row FROM potential_rows pr, s WHERE pr.row < s.view_h ),
+rays AS ( SELECT c.col, (p.dir - s.fov/2.0 + s.fov * (c.col*1.0 / (s.view_w - 1))) AS angle FROM cols c, s, p ),
+raytrace(col, step_count, fx, fy, angle) AS (
+  SELECT r.col, 1, p.x + COS(r.angle)*s.step, p.y + SIN(r.angle)*s.step, r.angle 
+  FROM rays r, p, s 
+  UNION ALL 
+  SELECT rt.col, rt.step_count + 1, rt.fx + COS(rt.angle)*s.step, rt.fy + SIN(rt.angle)*s.step, rt.angle 
+  FROM raytrace rt, s 
+  WHERE rt.step_count < s.max_steps 
+  AND NOT EXISTS (
+    SELECT 1 FROM map m 
+    WHERE m.x = CAST(rt.fx AS INT) AND m.y = CAST(rt.fy AS INT) AND m.tile = '#'
+  )
+),
+/* ... more SQL ... */
+  </pre>
+
+  <div class="demo-container">
+    <h2>Controls</h2>
+    <ul>
+      <li><strong>W</strong> - Move forward</li>
+      <li><strong>S</strong> - Move backward</li>
+      <li><strong>A</strong> - Turn left</li>
+      <li><strong>D</strong> - Turn right</li>
+      <li><strong>Spacebar</strong> - Shoot</li>
+      <li><strong>L</strong> - Toggle verbose logging</li>
+    </ul>
+    <a href="index.html" class="button">Launch Game</a>
+  </div>
+
+  <footer>
+    <p>
+      DuckDB-DOOM is an open-source project. <a href="https://github.com/yourusername/duckdb-doom">View on GitHub</a>.
+    </p>
+    <p>
+      Powered by <a href="https://github.com/duckdb/duckdb-wasm">DuckDB-WASM</a>
+    </p>
+  </footer>
+</body>
+</html>
