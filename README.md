@@ -49,7 +49,7 @@ The game uses SQL in interesting ways:
 No installation needed! Just clone the repository and open `index.html` in a web browser:
 
 ```bash
-git clone https://github.com/yourusername/duckdb-doom.git
+git clone https://github.com/patricktrainer/duckdb-doom.git
 cd duckdb-doom
 # Open index.html in your browser
 ```
