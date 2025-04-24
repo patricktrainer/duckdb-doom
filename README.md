@@ -59,7 +59,7 @@ cd duckdb-doom
 Contributions are welcome! Some ideas for improvements:
 
 - Add textures to walls
-- Implement more complex enemy AI
+- Improve enemy AI features
 - Add sound effects
 - Create additional levels
 
