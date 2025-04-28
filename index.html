@@ -1,7 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-  <meta charset="UTF-8"/>
+  <meta charset="UTF-8" />
   <title>DuckDB‑WASM Doom 3D</title>
   <style>
     body {
@@ -12,12 +13,14 @@
         margin: 0; /* Remove default body margin */
         overflow: hidden; /* Prevent scrollbars */
     }
+
     #screen {
         line-height: .9;
         font-size: 14px;
         white-space: pre;
         margin-right: 20px; /* Add some space between views */
     }
+
     #minimap {
         line-height: 1.0; /* Minimap might look better with slightly more line height */
         font-size: 14px;
@@ -28,6 +31,7 @@
         height: 16em; /* 16 lines high */
         overflow: hidden; /* Hide anything outside border */
     }
+
     /* Optional: Container for instructions/status */
     #status {
         position: absolute;
@@ -39,6 +43,7 @@
     }
   </style>
 </head>
+
 <body>
   <pre id="screen">Loading DuckDB-WASM...</pre>
   <pre id="minimap"></pre>
@@ -55,9 +60,9 @@
     // --- Verbose Logging Control ---
     let verboseLogging = false;
     function logVerbose(...args) {
-        if (verboseLogging) {
-            console.log('[VERBOSE]', ...args);
-        }
+      if (verboseLogging) {
+        console.log('[VERBOSE]', ...args);
+      }
     }
     // -----------------------------
 
@@ -68,7 +73,7 @@
       let conn;
 
       function updateStatus(message) {
-          if (statusEl) statusEl.textContent = message;
+        if (statusEl) statusEl.textContent = message;
       }
 
       try {
@@ -86,13 +91,13 @@
 
         let bundle = JSDELIVR_BUNDLES['mvp'];
         if (!bundle) {
-            console.warn("MVP bundle not found! Trying fallback...");
-            const fallbackKey = Object.keys(JSDELIVR_BUNDLES)[0];
-            if (fallbackKey) { bundle = JSDELIVR_BUNDLES[fallbackKey]; }
-            else { throw new Error("Could not find *any* DuckDB Wasm bundle information."); }
+          console.warn("MVP bundle not found! Trying fallback...");
+          const fallbackKey = Object.keys(JSDELIVR_BUNDLES)[0];
+          if (fallbackKey) { bundle = JSDELIVR_BUNDLES[fallbackKey]; }
+          else { throw new Error("Could not find *any* DuckDB Wasm bundle information."); }
         }
         if (!bundle || !bundle.mainModule || !bundle.mainWorker) {
-             throw new Error(`Selected bundle (${bundle ? 'found' : 'not found'}) is incomplete or invalid.`);
+          throw new Error(`Selected bundle (${bundle ? 'found' : 'not found'}) is incomplete or invalid.`);
         }
 
         logVerbose(`Selected bundle:`, bundle);
@@ -100,18 +105,18 @@
 
         logVerbose("Creating Worker Blob URL...");
         screenEl.textContent += "\nCreating worker...";
-        const workerUrl = URL.createObjectURL( new Blob([`importScripts("${bundle.mainWorker}");`], { type: 'text/javascript' }) );
+        const workerUrl = URL.createObjectURL(new Blob([`importScripts("${bundle.mainWorker}");`], { type: 'text/javascript' }));
         logVerbose("Worker Blob URL created:", workerUrl);
 
         let worker;
         try {
-             worker = new Worker(workerUrl);
-             logVerbose("Worker created.");
-             screenEl.textContent += "\nWorker object created.";
+          worker = new Worker(workerUrl);
+          logVerbose("Worker created.");
+          screenEl.textContent += "\nWorker object created.";
         } catch (workerError) {
-            console.error(">>> Critical Error creating Worker:", workerError);
-            screenEl.textContent += `\n\nFATAL: Error creating Worker: ${workerError.message}\nCheck Console F12.`;
-            throw workerError;
+          console.error(">>> Critical Error creating Worker:", workerError);
+          screenEl.textContent += `\n\nFATAL: Error creating Worker: ${workerError.message}\nCheck Console F12.`;
+          throw workerError;
         }
 
         const db = new duckdb.AsyncDuckDB(logger, worker);
@@ -156,7 +161,13 @@
 
           -- ENEMIES (Generate Randomly)
           DROP TABLE IF EXISTS enemies;
-          CREATE TABLE enemies(id INT PRIMARY KEY, x DOUBLE, y DOUBLE, icon CHAR DEFAULT 'E');
+          CREATE TABLE enemies(
+            id INT PRIMARY KEY,
+            x DOUBLE,
+            y DOUBLE,
+            icon CHAR DEFAULT 'E',
+            circle_dir INT DEFAULT CASE WHEN random() < 0.5 THEN 1 ELSE -1 END
+          );
           WITH RandomPositions AS (
               SELECT 1 + floor(random() * 14)::INT AS rx, 1 + floor(random() * 14)::INT AS ry
               FROM generate_series(1, 25) -- Generate 25 candidates
@@ -232,12 +243,12 @@
           try {
             logVerbose("Fetching data for 3D frame...");
             const [frameResult, distanceResult, bulletResult, enemyResult, playerResult, settingsResult] = await Promise.all([
-                conn.query(`SELECT y, row FROM render_3d_frame ORDER BY y;`), // Include y for safety
-                conn.query(`SELECT x, dist_corrected FROM column_distances ORDER BY x;`),
-                conn.query(`SELECT id, x, y FROM bullets;`),
-                conn.query(`SELECT id, x, y, icon FROM enemies;`),
-                conn.query(`SELECT x, y, dir FROM player LIMIT 1;`),
-                conn.query(`SELECT fov, view_w, view_h FROM settings LIMIT 1;`)
+              conn.query(`SELECT y, row FROM render_3d_frame ORDER BY y;`), // Include y for safety
+              conn.query(`SELECT x, dist_corrected FROM column_distances ORDER BY x;`),
+              conn.query(`SELECT id, x, y FROM bullets;`),
+              conn.query(`SELECT id, x, y, icon FROM enemies;`),
+              conn.query(`SELECT x, y, dir FROM player LIMIT 1;`),
+              conn.query(`SELECT fov, view_w, view_h FROM settings LIMIT 1;`)
             ]);
             logVerbose("Data fetched.");
 
@@ -249,7 +260,7 @@
             const settings = settingsResult.get(0);
 
             if (!player || !settings) { if (!screenEl.textContent.includes("Initialization Error")) screenEl.textContent = "Error: Missing player/settings data."; logVerbose("render3d END - Missing data"); return; }
-            if (backgroundRows.length !== settings.view_h) { if (!screenEl.textContent.includes("Initialization Error")) screenEl.textContent = `Error: Frame buffer height mismatch (${backgroundRows.length} vs ${settings.view_h}).`; logVerbose("render3d END - Height mismatch"); return;}
+            if (backgroundRows.length !== settings.view_h) { if (!screenEl.textContent.includes("Initialization Error")) screenEl.textContent = `Error: Frame buffer height mismatch (${backgroundRows.length} vs ${settings.view_h}).`; logVerbose("render3d END - Height mismatch"); return; }
 
             logVerbose(`Got ${bullets.length} bullets, ${enemies.length} enemies.`);
             const frameBuffer = backgroundRows.map(row => row ? row.split('') : Array(settings.view_w).fill('?'));
@@ -257,7 +268,7 @@
             const view_h = settings.view_h;
             const fov = settings.fov;
 
-            const entities = [ ...bullets.map(b => ({ ...b, type: 'bullet', icon: '*' })), ...enemies.map(e => ({ ...e, type: 'enemy' })) ];
+            const entities = [...bullets.map(b => ({ ...b, type: 'bullet', icon: '*' })), ...enemies.map(e => ({ ...e, type: 'enemy' }))];
             entities.sort((a, b) => (Math.hypot(b.x - player.x, b.y - player.y)) - (Math.hypot(a.x - player.x, a.y - player.y)));
             logVerbose(`Sorted ${entities.length} entities for drawing.`);
 
@@ -266,39 +277,134 @@
             const projectionFactor = view_w / (2 * Math.tan(fov / 2));
 
             for (const entity of entities) {
-                const dx = entity.x - player.x;
-                const dy = entity.y - player.y;
-                const depth = dx * cosDir - dy * sinDir;
+              const dx = entity.x - player.x;
+              const dy = entity.y - player.y;
+              const depth = dx * cosDir - dy * sinDir;
 
-                if (depth <= 0.1) continue;
+              if (depth <= 0.1) continue;
 
-                const horizontalOffset = dx * sinDir + dy * cosDir;
-                let screen_x = Math.round(view_w / 2 + (horizontalOffset / depth) * projectionFactor);
+              const horizontalOffset = dx * sinDir + dy * cosDir;
+              let screen_x = Math.round(view_w / 2 + (horizontalOffset / depth) * projectionFactor);
 
-                if (screen_x < 0 || screen_x >= view_w) continue;
+              if (screen_x < 0 || screen_x >= view_w) continue;
 
-                // const spriteHeight = Math.min(view_h, Math.max(1, Math.round(view_h / depth))); // Not currently used for single char
-                const drawY = Math.floor(view_h / 2);
-                const finalY = Math.max(0, Math.min(view_h - 1, drawY));
+              // const spriteHeight = Math.min(view_h, Math.max(1, Math.round(view_h / depth))); // Not currently used for single char
+              const drawY = Math.floor(view_h / 2);
+              const finalY = Math.max(0, Math.min(view_h - 1, drawY));
 
-                const wallDist = wallDistances[screen_x] !== undefined ? wallDistances[screen_x] : Infinity;
+              const wallDist = wallDistances[screen_x] !== undefined ? wallDistances[screen_x] : Infinity;
 
-                if (depth < wallDist) {
-                   if (frameBuffer[finalY] && frameBuffer[finalY][screen_x] !== undefined) {
-                       frameBuffer[finalY][screen_x] = entity.icon;
-                       logVerbose(`Drawing ${entity.type} ${entity.id || ''} ('${entity.icon}') at (${screen_x}, ${finalY}), depth ${depth.toFixed(2)} < wall ${wallDist.toFixed(2)}`);
-                   }
-                } else {
-                   logVerbose(`Skipping ${entity.type} ${entity.id || ''} at (${screen_x}, ${finalY}), depth ${depth.toFixed(2)} >= wall ${wallDist.toFixed(2)}`);
+              if (depth < wallDist) {
+                if (frameBuffer[finalY] && frameBuffer[finalY][screen_x] !== undefined) {
+                  frameBuffer[finalY][screen_x] = entity.icon;
+                  logVerbose(`Drawing ${entity.type} ${entity.id || ''} ('${entity.icon}') at (${screen_x}, ${finalY}), depth ${depth.toFixed(2)} < wall ${wallDist.toFixed(2)}`);
                 }
+              } else {
+                logVerbose(`Skipping ${entity.type} ${entity.id || ''} at (${screen_x}, ${finalY}), depth ${depth.toFixed(2)} >= wall ${wallDist.toFixed(2)}`);
+              }
             }
             screenEl.textContent = frameBuffer.map(row => row.join('')).join("\n");
             logVerbose("--- render3d END ---");
 
           } catch (renderError) {
-             console.error(">>> Error during render3d:", renderError);
-             if (!screenEl.textContent.includes("Initialization Error")) { screenEl.textContent = `Render Error:\n${renderError.message}\nCheck console.`; }
-             logVerbose("--- render3d END with error ---");
+            console.error(">>> Error during render3d:", renderError);
+            if (!screenEl.textContent.includes("Initialization Error")) { screenEl.textContent = `Render Error:\n${renderError.message}\nCheck console.`; }
+            logVerbose("--- render3d END with error ---");
+          }
+        }
+
+        async function tickEnemies() {
+          logVerbose("--- tickEnemies START ---");
+          try {
+            const playerResult = await conn.query('SELECT x, y FROM player LIMIT 1;'); // Get all player positions for enemy movement decisions
+            const player = playerResult.get(0);
+            if (!player) {
+              logVerbose("--- tickEnemies END - No player found ---");
+              return;
+            }
+
+            const moveStep = 0.1; // Adjust the movements as needed
+            // now move each enemy
+            const sql = `
+              WITH enemy_states AS (
+                SELECT
+                  id,
+                  x as old_x,
+                  y as old_y,
+                  -- Calculate distance to player
+                  POW(x - ${player.x}, 2) + POW(y - ${player.y}, 2) as dist_sq,
+                  -- Calculate normalized direction to/from player
+                  (${player.x} - x) / SQRT(POW(x - ${player.x}, 2) + POW(y - ${player.y}, 2)) as dir_x,
+                  (${player.y} - y) / SQRT(POW(x - ${player.x}, 2) + POW(y - ${player.y}, 2)) as dir_y,
+                  -- Get or initialize circle direction
+                  COALESCE(
+                    circle_dir,
+                    CASE WHEN random() < 0.5 THEN 1 ELSE -1 END
+                  ) as current_dir,
+                  -- Small chance to change direction
+                  CASE WHEN random() < 0.02 THEN -1 ELSE 1 END as dir_change
+                FROM enemies
+                WHERE POW(x - ${player.x}, 2) + POW(y - ${player.y}, 2) < 81 -- Only move if within 9 units
+              ),
+              movement_calcs AS (
+                SELECT
+                  id, old_x, old_y, dist_sq,
+                  current_dir * dir_change as new_dir,
+                  CASE
+                    -- If very close (< 3 units), retreat
+                    WHEN dist_sq < 9 THEN
+                      -dir_x * ${moveStep} * (0.9 + random() * 0.2)
+                    -- If medium range (3-5 units), circle around
+                    WHEN dist_sq < 25 THEN
+                      -- Move perpendicular to player direction
+                      dir_y * current_dir * ${moveStep} * (0.9 + random() * 0.2)
+                    -- If far (> 5 units), approach
+                    ELSE
+                      dir_x * ${moveStep} * (0.9 + random() * 0.2)
+                  END as dx,
+                  CASE
+                    WHEN dist_sq < 9 THEN
+                      -dir_y * ${moveStep} * (0.9 + random() * 0.2)
+                    WHEN dist_sq < 25 THEN
+                      -dir_x * current_dir * ${moveStep} * (0.9 + random() * 0.2)
+                    ELSE
+                      dir_y * ${moveStep} * (0.9 + random() * 0.2)
+                  END as dy
+                FROM enemy_states
+              )
+              UPDATE enemies e SET
+                x = CASE
+                  -- Check if moving would hit a wall
+                  WHEN EXISTS (
+                    SELECT 1 FROM map m
+                    WHERE m.x = FLOOR(mc.old_x + mc.dx)
+                    AND m.y = FLOOR(mc.old_y)
+                    AND m.tile = '#'
+                  ) THEN e.x
+                  -- If clear, apply movement
+                  ELSE mc.old_x + mc.dx
+                END,
+                y = CASE
+                  WHEN EXISTS (
+                    SELECT 1 FROM map m
+                    WHERE m.x = FLOOR(mc.old_x)
+                    AND m.y = FLOOR(mc.old_y + mc.dy)
+                    AND m.tile = '#'
+                  ) THEN e.y
+                  ELSE mc.old_y + mc.dy
+                END,
+                -- Update circle direction
+                circle_dir = mc.new_dir
+              FROM movement_calcs mc
+              WHERE e.id = mc.id;
+            `;
+
+            logVerbose("Executing enemy movement SQL");
+            await conn.query(sql);
+            logVerbose("--- tickEnemies END ---");
+          } catch (error) {
+            console.error(">>> Error during tickEnemies:", error);
+            logVerbose("--- tickEnemies END with error ---");
           }
         }
 
@@ -320,15 +426,27 @@
             logVerbose("Dropping collisions table (if exists)...");
             await conn.query(`DROP TABLE IF EXISTS collisions;`); // Ensures clean start
 
-            sql = `CREATE TEMP TABLE collisions AS SELECT b.id AS bullet_id, e.id AS enemy_id FROM bullets b JOIN enemies e ON CAST(b.x AS INT) = CAST(e.x AS INT) AND CAST(b.y AS INT) = CAST(e.y AS INT);`;
-            logVerbose("Executing SQL:", sql);
+            // Check for bullet-enemy collisions
+            sql = `CREATE TEMP TABLE collisions AS SELECT b.id AS bullet_id, e.id AS enemy_id, e.x AS enemy_x, e.y AS enemy_y FROM bullets b JOIN enemies e ON CAST(b.x AS INT) = CAST(e.x AS INT) AND CAST(b.y AS INT) = CAST(e.y AS INT);`;
+            logVerbose("Checking for bullet-enemy collisions...");
             await conn.query(sql);
 
+            // Get collision details before deleting
+            const collisionResult = await conn.query('SELECT * FROM collisions;');
+            const collisions = collisionResult.toArray();
+
+            // Log each collision
+            for (const collision of collisions) {
+              logVerbose(`Enemy hit! Enemy #${collision.enemy_id} at position (${collision.enemy_x.toFixed(2)}, ${collision.enemy_y.toFixed(2)}) was hit by bullet #${collision.bullet_id}`);
+            }
+
             sql = `DELETE FROM enemies WHERE id IN (SELECT enemy_id FROM collisions);`;
+            logVerbose(`Removing ${collisions.length} hit enemies...`);
             logVerbose("Executing SQL:", sql);
             await conn.query(sql);
 
             sql = `DELETE FROM bullets WHERE id IN (SELECT bullet_id FROM collisions);`;
+            logVerbose(`Removing ${collisions.length} collision bullets...`);
             logVerbose("Executing SQL:", sql);
             await conn.query(sql);
 
@@ -344,89 +462,89 @@
 
         // --- Minimap Rendering ---
         async function renderMinimap() {
-            logVerbose("--- renderMinimap START ---");
-            try {
-                logVerbose("Fetching data for minimap...");
-                const [mapResult, playerResult, enemyResult, bulletResult] = await Promise.all([
-                    conn.query(`SELECT x, y, tile FROM map ORDER BY y, x;`),
-                    conn.query(`SELECT x, y, icon FROM player LIMIT 1;`),
-                    conn.query(`SELECT id, x, y, icon FROM enemies;`),
-                    conn.query(`SELECT id, x, y FROM bullets;`)
-                ]);
-                logVerbose("Minimap data fetched.");
+          logVerbose("--- renderMinimap START ---");
+          try {
+            logVerbose("Fetching data for minimap...");
+            const [mapResult, playerResult, enemyResult, bulletResult] = await Promise.all([
+              conn.query(`SELECT x, y, tile FROM map ORDER BY y, x;`),
+              conn.query(`SELECT x, y, icon FROM player LIMIT 1;`),
+              conn.query(`SELECT id, x, y, icon FROM enemies;`),
+              conn.query(`SELECT id, x, y FROM bullets;`)
+            ]);
+            logVerbose("Minimap data fetched.");
 
-                const mapData = mapResult.toArray();
-                const player = playerResult.get(0);
-                const enemies = enemyResult.toArray();
-                const bullets = bulletResult.toArray();
+            const mapData = mapResult.toArray();
+            const player = playerResult.get(0);
+            const enemies = enemyResult.toArray();
+            const bullets = bulletResult.toArray();
 
-                if (!player) { logVerbose("renderMinimap END - No player data"); return; }
+            if (!player) { logVerbose("renderMinimap END - No player data"); return; }
 
-                const minimapBuffer = Array(MAP_HEIGHT).fill(null).map(() => Array(MAP_WIDTH).fill(' '));
+            const minimapBuffer = Array(MAP_HEIGHT).fill(null).map(() => Array(MAP_WIDTH).fill(' '));
 
-                // 1. Draw map tiles
-                for (const tile of mapData) {
-                    if (tile.y >= 0 && tile.y < MAP_HEIGHT && tile.x >= 0 && tile.x < MAP_WIDTH) {
-                        minimapBuffer[tile.y][tile.x] = tile.tile;
-                    }
-                }
-                // 2. Draw bullets
-                for (const bullet of bullets) {
-                    const bx = Math.floor(bullet.x); const by = Math.floor(bullet.y);
-                    if (by >= 0 && by < MAP_HEIGHT && bx >= 0 && bx < MAP_WIDTH) minimapBuffer[by][bx] = '*';
-                }
-                // 3. Draw enemies
-                for (const enemy of enemies) {
-                    const ex = Math.floor(enemy.x); const ey = Math.floor(enemy.y);
-                    if (ey >= 0 && ey < MAP_HEIGHT && ex >= 0 && ex < MAP_WIDTH) minimapBuffer[ey][ex] = enemy.icon;
-                }
-                // 4. Draw player
-                const px = Math.floor(player.x); const py = Math.floor(player.y);
-                if (py >= 0 && py < MAP_HEIGHT && px >= 0 && px < MAP_WIDTH) minimapBuffer[py][px] = player.icon;
-
-                minimapEl.textContent = minimapBuffer.map(row => row.join('')).join('\n');
-                logVerbose("--- renderMinimap END ---");
-
-            } catch(mapError) {
-                console.error(">>> Error rendering minimap:", mapError);
-                minimapEl.textContent = "Minimap Error";
-                logVerbose("--- renderMinimap END with error ---");
+            // 1. Draw map tiles
+            for (const tile of mapData) {
+              if (tile.y >= 0 && tile.y < MAP_HEIGHT && tile.x >= 0 && tile.x < MAP_WIDTH) {
+                minimapBuffer[tile.y][tile.x] = tile.tile;
+              }
             }
+            // 2. Draw bullets
+            for (const bullet of bullets) {
+              const bx = Math.floor(bullet.x); const by = Math.floor(bullet.y);
+              if (by >= 0 && by < MAP_HEIGHT && bx >= 0 && bx < MAP_WIDTH) minimapBuffer[by][bx] = '*';
+            }
+            // 3. Draw enemies
+            for (const enemy of enemies) {
+              const ex = Math.floor(enemy.x); const ey = Math.floor(enemy.y);
+              if (ey >= 0 && ey < MAP_HEIGHT && ex >= 0 && ex < MAP_WIDTH) minimapBuffer[ey][ex] = enemy.icon;
+            }
+            // 4. Draw player
+            const px = Math.floor(player.x); const py = Math.floor(player.y);
+            if (py >= 0 && py < MAP_HEIGHT && px >= 0 && px < MAP_WIDTH) minimapBuffer[py][px] = player.icon;
+
+            minimapEl.textContent = minimapBuffer.map(row => row.join('')).join('\n');
+            logVerbose("--- renderMinimap END ---");
+
+          } catch (mapError) {
+            console.error(">>> Error rendering minimap:", mapError);
+            minimapEl.textContent = "Minimap Error";
+            logVerbose("--- renderMinimap END with error ---");
+          }
         }
 
         // --- Player movement collision detection ---
         async function isValidPosition(nx, ny) {
-           logVerbose(`--- isValidPosition START (Target: ${nx.toFixed(2)}, ${ny.toFixed(2)}) ---`);
-           const checkX = Math.floor(nx);
-           const checkY = Math.floor(ny);
-           if (checkX < 0 || checkX >= MAP_WIDTH || checkY < 0 || checkY >= MAP_HEIGHT) {
-               logVerbose(`   [isValidPosition] Target (${nx.toFixed(2)}, ${ny.toFixed(2)}) -> Cell (${checkX}, ${checkY}) is outside map bounds.`);
-               logVerbose("--- isValidPosition END - Returning: false (bounds check) ---");
-               return false;
-           }
+          logVerbose(`--- isValidPosition START (Target: ${nx.toFixed(2)}, ${ny.toFixed(2)}) ---`);
+          const checkX = Math.floor(nx);
+          const checkY = Math.floor(ny);
+          if (checkX < 0 || checkX >= MAP_WIDTH || checkY < 0 || checkY >= MAP_HEIGHT) {
+            logVerbose(`   [isValidPosition] Target (${nx.toFixed(2)}, ${ny.toFixed(2)}) -> Cell (${checkX}, ${checkY}) is outside map bounds.`);
+            logVerbose("--- isValidPosition END - Returning: false (bounds check) ---");
+            return false;
+          }
           // logVerbose(`   [isValidPosition] Checking map cell (${checkX}, ${checkY}) for target (${nx.toFixed(2)}, ${ny.toFixed(2)})`);
-           try {
-               const sql = `SELECT tile FROM map WHERE x = ${checkX} AND y = ${checkY} LIMIT 1;`; // Add LIMIT 1
-               logVerbose(`   [isValidPosition] Executing SQL: ${sql}`);
-               const result = await conn.query(sql);
-               const row = result.get(0);
-               let isValid = false;
-               if (row) {
-                   const tile = row.tile;
-                   const isWall = (tile === '#');
-                   isValid = !isWall; // Return true if NOT a wall
-                   logVerbose(`   [isValidPosition] Cell (${checkX}, ${checkY}) contains tile: '${tile}'. Is wall? ${isWall}. IsValid: ${isValid}`);
-               } else {
-                   isValid = false; // No data for cell, treat as blocked
-                   logVerbose(`   [isValidPosition] No map data found for cell (${checkX}, ${checkY}). Treating as blocked. IsValid: ${isValid}`);
-               }
-               logVerbose(`--- isValidPosition END - Returning: ${isValid} ---`);
-               return isValid;
-           } catch (dbError) {
-               console.error(`   [isValidPosition] DB Error checking cell (${checkX}, ${checkY}):`, dbError);
-               logVerbose(`--- isValidPosition END - Returning: false (DB error) ---`);
-               return false;
-           }
+          try {
+            const sql = `SELECT tile FROM map WHERE x = ${checkX} AND y = ${checkY} LIMIT 1;`; // Add LIMIT 1
+            logVerbose(`   [isValidPosition] Executing SQL: ${sql}`);
+            const result = await conn.query(sql);
+            const row = result.get(0);
+            let isValid = false;
+            if (row) {
+              const tile = row.tile;
+              const isWall = (tile === '#');
+              isValid = !isWall; // Return true if NOT a wall
+              logVerbose(`   [isValidPosition] Cell (${checkX}, ${checkY}) contains tile: '${tile}'. Is wall? ${isWall}. IsValid: ${isValid}`);
+            } else {
+              isValid = false; // No data for cell, treat as blocked
+              logVerbose(`   [isValidPosition] No map data found for cell (${checkX}, ${checkY}). Treating as blocked. IsValid: ${isValid}`);
+            }
+            logVerbose(`--- isValidPosition END - Returning: ${isValid} ---`);
+            return isValid;
+          } catch (dbError) {
+            console.error(`   [isValidPosition] DB Error checking cell (${checkX}, ${checkY}):`, dbError);
+            logVerbose(`--- isValidPosition END - Returning: false (DB error) ---`);
+            return false;
+          }
         }
 
         // 5) Input: WASD = move/turn, Space = shoot, L = toggle logging
@@ -439,57 +557,57 @@
 
           let p;
           try {
-             logVerbose("Fetching player state for keydown...");
-             const playerStateResult = await conn.query('SELECT x, y, dir FROM player LIMIT 1;');
-             p = playerStateResult.get(0);
-             if (!p) { console.error("Player state not found!"); logVerbose("--- keydown END - Player not found ---"); return; }
-             logVerbose(`Player state: (${p.x.toFixed(2)}, ${p.y.toFixed(2)}), Dir: ${p.dir.toFixed(2)}`);
+            logVerbose("Fetching player state for keydown...");
+            const playerStateResult = await conn.query('SELECT x, y, dir FROM player LIMIT 1;');
+            p = playerStateResult.get(0);
+            if (!p) { console.error("Player state not found!"); logVerbose("--- keydown END - Player not found ---"); return; }
+            logVerbose(`Player state: (${p.x.toFixed(2)}, ${p.y.toFixed(2)}), Dir: ${p.dir.toFixed(2)}`);
           } catch (inputError) { console.error("Error fetching player state:", inputError); logVerbose("--- keydown END - DB error fetching player ---"); return; }
 
           let nx = p.x, ny = p.y, ndir = p.dir;
           let sql = ''; // To store SQL for logging
 
           try {
-            switch(e.key.toLowerCase()) {
-                case 'w':
-                  nx = p.x + Math.cos(p.dir) * moveStep; ny = p.y + Math.sin(p.dir) * moveStep;
-                  // logVerbose(`Trying W: Current (${p.x.toFixed(2)}, ${p.y.toFixed(2)}), Target (${nx.toFixed(2)}, ${ny.toFixed(2)})`);
-                  const isWValid = await isValidPosition(nx, ny);
-                  // logVerbose(`isValidPosition for W returned: ${isWValid}`);
-                  if (isWValid) { sql = `UPDATE player SET x = ${nx}, y = ${ny};`; logVerbose("Executing SQL:", sql); await conn.query(sql); moved = true; }
-                  break;
-                case 's':
-                  nx = p.x - Math.cos(p.dir) * moveStep; ny = p.y - Math.sin(p.dir) * moveStep;
-                  // logVerbose(`Trying S: Current (${p.x.toFixed(2)}, ${p.y.toFixed(2)}), Target (${nx.toFixed(2)}, ${ny.toFixed(2)})`);
-                  const isSValid = await isValidPosition(nx, ny);
-                  // logVerbose(`isValidPosition for S returned: ${isSValid}`);
-                  if (isSValid) { sql = `UPDATE player SET x = ${nx}, y = ${ny};`; logVerbose("Executing SQL:", sql); await conn.query(sql); moved = true; }
-                  break;
-                case 'a':
-                  ndir = p.dir - turnStep; sql = `UPDATE player SET dir = ${ndir};`; logVerbose("Executing SQL:", sql); await conn.query(sql); moved = true;
-                  break;
-                case 'd':
-                  ndir = p.dir + turnStep; sql = `UPDATE player SET dir = ${ndir};`; logVerbose("Executing SQL:", sql); await conn.query(sql); moved = true;
-                  break;
-                case ' ':
-                  const fireStateResult = await conn.query('SELECT x, y, dir FROM player LIMIT 1;'); // Fetch fresh state
-                  const fp = fireStateResult.get(0);
-                  if (fp) { sql = `INSERT INTO bullets(x, y, dx, dy) VALUES (${fp.x}, ${fp.y}, ${Math.cos(fp.dir)*0.5}, ${Math.sin(fp.dir)*0.5});`; logVerbose("Executing SQL:", sql); await conn.query(sql); logVerbose("Bullet fired!"); }
-                  else { console.error("Could not get player state to fire bullet."); }
-                  break;
-                case 'l': // Toggle logging
-                  verboseLogging = !verboseLogging;
-                  console.log(`Verbose Logging ${verboseLogging ? 'ENABLED' : 'DISABLED'}`);
-                  updateStatus(`Verbose Logging ${verboseLogging ? 'ON' : 'OFF'}. Use WASD/Space.`);
-                  break; // Don't prevent default or trigger render for 'l'
-                default: logVerbose("--- keydown END - Unhandled key ---"); return; // Exit if not a handled key
+            switch (e.key.toLowerCase()) {
+              case 'w':
+                nx = p.x + Math.cos(p.dir) * moveStep; ny = p.y + Math.sin(p.dir) * moveStep;
+                // logVerbose(`Trying W: Current (${p.x.toFixed(2)}, ${p.y.toFixed(2)}), Target (${nx.toFixed(2)}, ${ny.toFixed(2)})`);
+                const isWValid = await isValidPosition(nx, ny);
+                // logVerbose(`isValidPosition for W returned: ${isWValid}`);
+                if (isWValid) { sql = `UPDATE player SET x = ${nx}, y = ${ny};`; logVerbose("Executing SQL:", sql); await conn.query(sql); moved = true; }
+                break;
+              case 's':
+                nx = p.x - Math.cos(p.dir) * moveStep; ny = p.y - Math.sin(p.dir) * moveStep;
+                // logVerbose(`Trying S: Current (${p.x.toFixed(2)}, ${p.y.toFixed(2)}), Target (${nx.toFixed(2)}, ${ny.toFixed(2)})`);
+                const isSValid = await isValidPosition(nx, ny);
+                // logVerbose(`isValidPosition for S returned: ${isSValid}`);
+                if (isSValid) { sql = `UPDATE player SET x = ${nx}, y = ${ny};`; logVerbose("Executing SQL:", sql); await conn.query(sql); moved = true; }
+                break;
+              case 'a':
+                ndir = p.dir - turnStep; sql = `UPDATE player SET dir = ${ndir};`; logVerbose("Executing SQL:", sql); await conn.query(sql); moved = true;
+                break;
+              case 'd':
+                ndir = p.dir + turnStep; sql = `UPDATE player SET dir = ${ndir};`; logVerbose("Executing SQL:", sql); await conn.query(sql); moved = true;
+                break;
+              case ' ':
+                const fireStateResult = await conn.query('SELECT x, y, dir FROM player LIMIT 1;'); // Fetch fresh state
+                const fp = fireStateResult.get(0);
+                if (fp) { sql = `INSERT INTO bullets(x, y, dx, dy) VALUES (${fp.x}, ${fp.y}, ${Math.cos(fp.dir) * 0.5}, ${Math.sin(fp.dir) * 0.5});`; logVerbose("Executing SQL:", sql); await conn.query(sql); logVerbose("Bullet fired!"); }
+                else { console.error("Could not get player state to fire bullet."); }
+                break;
+              case 'l': // Toggle logging
+                verboseLogging = !verboseLogging;
+                console.log(`Verbose Logging ${verboseLogging ? 'ENABLED' : 'DISABLED'}`);
+                updateStatus(`Verbose Logging ${verboseLogging ? 'ON' : 'OFF'}. Use WASD/Space.`);
+                break; // Don't prevent default or trigger render for 'l'
+              default: logVerbose("--- keydown END - Unhandled key ---"); return; // Exit if not a handled key
             }
           } catch (inputDbError) { console.error(">>> DB error during keydown:", inputDbError); moved = false; }
 
           if (moved) {
-              logVerbose("Player moved, triggering render...");
-              await render3d(); // Render 3D view
-              await renderMinimap(); // Render minimap
+            logVerbose("Player moved, triggering render...");
+            await render3d(); // Render 3D view
+            await renderMinimap(); // Render minimap
           }
           e.preventDefault(); // Prevent default for game keys (WASD, Space)
           logVerbose("--- keydown END ---");
@@ -503,14 +621,17 @@
           isProcessingTick = true;
           logVerbose(">>> Game Loop Tick START <<<");
           try {
-            await tickBullets();
+            await Promise.all([
+              tickBullets(),
+              tickEnemies()
+            ]);
             await render3d(); // Render 3D view
             await renderMinimap(); // Render minimap
           } catch (intervalError) { console.error(">>> Error in setInterval async execution:", intervalError); }
           finally {
-             isProcessingTick = false; // Release the flag
-             logVerbose(">>> Game Loop Tick END <<<");
-            }
+            isProcessingTick = false; // Release the flag
+            logVerbose(">>> Game Loop Tick END <<<");
+          }
         }, 150); // ~6-7 FPS
 
         logVerbose("Performing initial render...");
@@ -529,4 +650,5 @@
     })();
   </script>
 </body>
+
 </html>
