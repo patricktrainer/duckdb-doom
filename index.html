@@ -41,6 +41,17 @@
         background-color: rgba(0,0,0,0.7); /* Slightly visible background */
         padding: 2px 5px;
     }
+
+    /* DOOM Color Palette */
+    .c-ceiling    { color: #1a1a2e; }  /* Dark blue-gray */
+    .c-floor      { color: #3d2817; }  /* Dark brown */
+    .c-wall-close { color: #c9a227; }  /* Bright tan (closest) */
+    .c-wall-mid   { color: #8b6914; }  /* Medium brown */
+    .c-wall-far   { color: #5a4510; }  /* Darker brown */
+    .c-wall-dist  { color: #3a2d0a; }  /* Darkest brown (farthest) */
+    .c-enemy      { color: #ff4444; }  /* Red */
+    .c-bullet     { color: #ffff00; }  /* Yellow */
+    .c-player     { color: #00ff00; }  /* Green */
   </style>
 </head>
 
@@ -63,6 +74,26 @@
       if (verboseLogging) {
         console.log('[VERBOSE]', ...args);
       }
+    }
+    // -----------------------------
+
+    // --- Color Mapping (matches SQL color codes) ---
+    const COLOR_MAP = {
+      'C': 'ceiling', 
+      'F': 'floor',
+      '1': 'wall-close', 
+      '2': 'wall-mid', 
+      '3': 'wall-far', 
+      '4': 'wall-dist',
+      'E': 'enemy', 
+      'B': 'bullet', 
+      'P': 'player'
+    };
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
     }
     // -----------------------------
 
@@ -211,8 +242,8 @@
           hit_walls AS ( SELECT col, MIN(step_count) as min_steps FROM raytrace rt WHERE EXISTS (SELECT 1 FROM map m WHERE m.x = CAST(rt.fx AS INT) AND m.y = CAST(rt.fy AS INT) AND m.tile = '#') GROUP BY col ),
           distances AS ( SELECT c.col, COALESCE(hw.min_steps * s.step, s.max_steps * s.step) AS dist FROM cols c LEFT JOIN hit_walls hw ON c.col = hw.col JOIN s ON TRUE ),
           heights AS ( SELECT d.col, CASE WHEN d.dist <= 0 THEN s.view_h ELSE GREATEST(0, LEAST(s.view_h, CAST(s.view_h / (d.dist * COS(r.angle - p.dir)) AS INT))) END AS height FROM distances d JOIN s ON TRUE JOIN rays r ON d.col = r.col JOIN player p ON TRUE ),
-          pixels AS ( SELECT c.col AS x, rg.row AS y, CASE WHEN rg.row < (s.view_h - h.height) / 2 THEN ' ' WHEN rg.row >= (s.view_h + h.height) / 2 THEN '.' WHEN d.dist < s.max_steps * s.step / 4 THEN '█' WHEN d.dist < s.max_steps * s.step * 2 / 4 THEN '▓' WHEN d.dist < s.max_steps * s.step * 3 / 4 THEN '▒' ELSE '░' END AS ch FROM cols c CROSS JOIN rows_gen rg JOIN s ON TRUE JOIN heights h ON c.col = h.col JOIN distances d ON c.col = d.col )
-          SELECT y, string_agg(ch, '' ORDER BY x) AS row FROM pixels GROUP BY y ORDER BY y;
+          pixels AS ( SELECT c.col AS x, rg.row AS y, CASE WHEN rg.row < (s.view_h - h.height) / 2 THEN ' ' WHEN rg.row >= (s.view_h + h.height) / 2 THEN '.' WHEN d.dist < s.max_steps * s.step / 4 THEN '█' WHEN d.dist < s.max_steps * s.step * 2 / 4 THEN '▓' WHEN d.dist < s.max_steps * s.step * 3 / 4 THEN '▒' ELSE '░' END AS ch, CASE WHEN rg.row < (s.view_h - h.height) / 2 THEN 'C' WHEN rg.row >= (s.view_h + h.height) / 2 THEN 'F' WHEN d.dist < s.max_steps * s.step / 4 THEN '1' WHEN d.dist < s.max_steps * s.step * 2 / 4 THEN '2' WHEN d.dist < s.max_steps * s.step * 3 / 4 THEN '3' ELSE '4' END AS color_code FROM cols c CROSS JOIN rows_gen rg JOIN s ON TRUE JOIN heights h ON c.col = h.col JOIN distances d ON c.col = d.col )
+          SELECT y, string_agg(ch, '' ORDER BY x) AS row, string_agg(color_code, '' ORDER BY x) AS colors FROM pixels GROUP BY y ORDER BY y;
 
           -- VIEW FOR COLUMN DISTANCES (for depth buffer)
           DROP VIEW IF EXISTS column_distances;
@@ -243,7 +274,7 @@
           try {
             logVerbose("Fetching data for 3D frame...");
             const [frameResult, distanceResult, bulletResult, enemyResult, playerResult, settingsResult] = await Promise.all([
-              conn.query(`SELECT y, row FROM render_3d_frame ORDER BY y;`), // Include y for safety
+              conn.query(`SELECT y, row, colors FROM render_3d_frame ORDER BY y;`), // Include colors for color rendering
               conn.query(`SELECT x, dist_corrected FROM column_distances ORDER BY x;`),
               conn.query(`SELECT id, x, y FROM bullets;`),
               conn.query(`SELECT id, x, y, icon FROM enemies;`),
@@ -252,7 +283,7 @@
             ]);
             logVerbose("Data fetched.");
 
-            const backgroundRows = frameResult.toArray().map(r => r.row);
+            const frameData = frameResult.toArray();
             const wallDistances = distanceResult.toArray().reduce((acc, row) => { acc[row.x] = row.dist_corrected; return acc; }, {});
             const bullets = bulletResult.toArray();
             const enemies = enemyResult.toArray();
@@ -260,15 +291,21 @@
             const settings = settingsResult.get(0);
 
             if (!player || !settings) { if (!screenEl.textContent.includes("Initialization Error")) screenEl.textContent = "Error: Missing player/settings data."; logVerbose("render3d END - Missing data"); return; }
-            if (backgroundRows.length !== settings.view_h) { if (!screenEl.textContent.includes("Initialization Error")) screenEl.textContent = `Error: Frame buffer height mismatch (${backgroundRows.length} vs ${settings.view_h}).`; logVerbose("render3d END - Height mismatch"); return; }
+            if (frameData.length !== settings.view_h) { if (!screenEl.textContent.includes("Initialization Error")) screenEl.textContent = `Error: Frame buffer height mismatch (${frameData.length} vs ${settings.view_h}).`; logVerbose("render3d END - Height mismatch"); return; }
 
             logVerbose(`Got ${bullets.length} bullets, ${enemies.length} enemies.`);
-            const frameBuffer = backgroundRows.map(row => row ? row.split('') : Array(settings.view_w).fill('?'));
+            // Create dual buffers: characters and colors
+            const frameBuffer = frameData.map(r => r.row ? r.row.split('') : Array(settings.view_w).fill(' '));
+            const colorBuffer = frameData.map(r => r.colors ? r.colors.split('') : Array(settings.view_w).fill('C'));
             const view_w = settings.view_w;
             const view_h = settings.view_h;
             const fov = settings.fov;
 
-            const entities = [...bullets.map(b => ({ ...b, type: 'bullet', icon: '*' })), ...enemies.map(e => ({ ...e, type: 'enemy' }))];
+            // Add colorCode to entities
+            const entities = [
+              ...bullets.map(b => ({ ...b, type: 'bullet', icon: '*', colorCode: 'B' })),
+              ...enemies.map(e => ({ ...e, type: 'enemy', colorCode: 'E' }))
+            ];
             entities.sort((a, b) => (Math.hypot(b.x - player.x, b.y - player.y)) - (Math.hypot(a.x - player.x, a.y - player.y)));
             logVerbose(`Sorted ${entities.length} entities for drawing.`);
 
@@ -288,7 +325,6 @@
 
               if (screen_x < 0 || screen_x >= view_w) continue;
 
-              // const spriteHeight = Math.min(view_h, Math.max(1, Math.round(view_h / depth))); // Not currently used for single char
               const drawY = Math.floor(view_h / 2);
               const finalY = Math.max(0, Math.min(view_h - 1, drawY));
 
@@ -297,13 +333,44 @@
               if (depth < wallDist) {
                 if (frameBuffer[finalY] && frameBuffer[finalY][screen_x] !== undefined) {
                   frameBuffer[finalY][screen_x] = entity.icon;
+                  colorBuffer[finalY][screen_x] = entity.colorCode; // Set entity color
                   logVerbose(`Drawing ${entity.type} ${entity.id || ''} ('${entity.icon}') at (${screen_x}, ${finalY}), depth ${depth.toFixed(2)} < wall ${wallDist.toFixed(2)}`);
                 }
               } else {
                 logVerbose(`Skipping ${entity.type} ${entity.id || ''} at (${screen_x}, ${finalY}), depth ${depth.toFixed(2)} >= wall ${wallDist.toFixed(2)}`);
               }
             }
-            screenEl.textContent = frameBuffer.map(row => row.join('')).join("\n");
+
+            // Convert buffers to HTML with colored spans (run-length encoded)
+            const htmlLines = [];
+            for (let y = 0; y < frameBuffer.length; y++) {
+              let lineHtml = '';
+              let currentColor = null;
+              let currentSpan = '';
+
+              for (let x = 0; x < frameBuffer[y].length; x++) {
+                const ch = frameBuffer[y][x];
+                const colorCode = colorBuffer[y][x];
+
+                if (colorCode !== currentColor) {
+                  // Close previous span and start new one
+                  if (currentSpan) {
+                    lineHtml += `<span class="c-${COLOR_MAP[currentColor] || 'ceiling'}">${escapeHtml(currentSpan)}</span>`;
+                  }
+                  currentColor = colorCode;
+                  currentSpan = ch;
+                } else {
+                  currentSpan += ch;
+                }
+              }
+              // Close final span
+              if (currentSpan) {
+                lineHtml += `<span class="c-${COLOR_MAP[currentColor] || 'ceiling'}">${escapeHtml(currentSpan)}</span>`;
+              }
+              htmlLines.push(lineHtml);
+            }
+
+            screenEl.innerHTML = htmlLines.join('\n');
             logVerbose("--- render3d END ---");
 
           } catch (renderError) {
@@ -480,29 +547,68 @@
 
             if (!player) { logVerbose("renderMinimap END - No player data"); return; }
 
+            // Create dual buffers: characters and colors
             const minimapBuffer = Array(MAP_HEIGHT).fill(null).map(() => Array(MAP_WIDTH).fill(' '));
+            const minimapColors = Array(MAP_HEIGHT).fill(null).map(() => Array(MAP_WIDTH).fill('F')); // Default floor color
 
             // 1. Draw map tiles
             for (const tile of mapData) {
               if (tile.y >= 0 && tile.y < MAP_HEIGHT && tile.x >= 0 && tile.x < MAP_WIDTH) {
                 minimapBuffer[tile.y][tile.x] = tile.tile;
+                minimapColors[tile.y][tile.x] = tile.tile === '#' ? '2' : 'F'; // Wall or floor color
               }
             }
             // 2. Draw bullets
             for (const bullet of bullets) {
               const bx = Math.floor(bullet.x); const by = Math.floor(bullet.y);
-              if (by >= 0 && by < MAP_HEIGHT && bx >= 0 && bx < MAP_WIDTH) minimapBuffer[by][bx] = '*';
+              if (by >= 0 && by < MAP_HEIGHT && bx >= 0 && bx < MAP_WIDTH) {
+                minimapBuffer[by][bx] = '*';
+                minimapColors[by][bx] = 'B'; // Bullet color
+              }
             }
             // 3. Draw enemies
             for (const enemy of enemies) {
               const ex = Math.floor(enemy.x); const ey = Math.floor(enemy.y);
-              if (ey >= 0 && ey < MAP_HEIGHT && ex >= 0 && ex < MAP_WIDTH) minimapBuffer[ey][ex] = enemy.icon;
+              if (ey >= 0 && ey < MAP_HEIGHT && ex >= 0 && ex < MAP_WIDTH) {
+                minimapBuffer[ey][ex] = enemy.icon;
+                minimapColors[ey][ex] = 'E'; // Enemy color
+              }
             }
             // 4. Draw player
             const px = Math.floor(player.x); const py = Math.floor(player.y);
-            if (py >= 0 && py < MAP_HEIGHT && px >= 0 && px < MAP_WIDTH) minimapBuffer[py][px] = player.icon;
+            if (py >= 0 && py < MAP_HEIGHT && px >= 0 && px < MAP_WIDTH) {
+              minimapBuffer[py][px] = player.icon;
+              minimapColors[py][px] = 'P'; // Player color
+            }
 
-            minimapEl.textContent = minimapBuffer.map(row => row.join('')).join('\n');
+            // Convert to colored HTML
+            const htmlLines = [];
+            for (let y = 0; y < minimapBuffer.length; y++) {
+              let lineHtml = '';
+              let currentColor = null;
+              let currentSpan = '';
+
+              for (let x = 0; x < minimapBuffer[y].length; x++) {
+                const ch = minimapBuffer[y][x];
+                const colorCode = minimapColors[y][x];
+
+                if (colorCode !== currentColor) {
+                  if (currentSpan) {
+                    lineHtml += `<span class="c-${COLOR_MAP[currentColor] || 'floor'}">${escapeHtml(currentSpan)}</span>`;
+                  }
+                  currentColor = colorCode;
+                  currentSpan = ch;
+                } else {
+                  currentSpan += ch;
+                }
+              }
+              if (currentSpan) {
+                lineHtml += `<span class="c-${COLOR_MAP[currentColor] || 'floor'}">${escapeHtml(currentSpan)}</span>`;
+              }
+              htmlLines.push(lineHtml);
+            }
+
+            minimapEl.innerHTML = htmlLines.join('\n');
             logVerbose("--- renderMinimap END ---");
 
           } catch (mapError) {
